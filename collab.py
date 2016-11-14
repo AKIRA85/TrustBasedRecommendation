@@ -87,7 +87,9 @@ threshold = 5
 
 for target in range(len(accepted_users)):
 	print "target :", target
-	sim = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x) for x in range(len(accepted_users))])
+	sim = np.zeros((len(accepted_users)), dtype=np.float64)
+	for x in range(len(accepted_users)):
+		sim[x] = calcuate_similarity(pivot_table, user_data, product_data, target, x)
 	sim_users = np.argpartition(sim, -threshold)[-threshold:]
 
 	purchase_count = {}
@@ -112,6 +114,7 @@ for target in range(len(accepted_users)):
 				recommend_prob[i] += sim[u]*(pivot_table[u][purchase_record[i]]-user_data.iloc[i, 0])
 				weight_sum += sim[u]
 
+	print recommend_prob
 	for i in range(len(purchase_record)):
 		recommend_prob[i] = user_data.iloc[target, 0] + recommend_prob[i]/weight_sum[i]
 

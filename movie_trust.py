@@ -8,7 +8,7 @@ import math
 number_of_thresholds = 11
 
 def getThreshold(t):
-	return 0.20+(t*0.4/(number_of_thresholds-1))
+	return (t*1.0/(number_of_thresholds-1))
 
 def calculate_trust(row, max_freq):
 	sigma = 0.5;
@@ -43,7 +43,7 @@ def calcuate_similarity(pivot_table, user_data, product_data, i, j):
 #create pandas dataframe
 
 # df = pd.read_csv('ratings_Electronics.csv', header=None, names=['reviewerID', 'movieID', 'overall', 'unixReviewTime'], sep=',', engine='python')
-df = pd.read_csv('ml-1m/ratings.dat', header=None, names=['reviewerID', 'movieID', 'overall', 'unixReviewTime'], sep=':+', engine='python')
+df = pd.read_csv('dataset/ml-1m/ratings.dat', header=None, names=['reviewerID', 'movieID', 'overall', 'unixReviewTime'], sep=':+', engine='python')
 # df = getDF('Digital_Music_5.json')
 #df = getDF('test_5500.json')
 # df.drop(['reviewerName', 'helpful', 'reviewText', 'reviewTime', 'summary'], inplace=True, axis=1)
@@ -185,7 +185,7 @@ for target in range(len(accepted_users)):
 				print "recall"
 			if((precision+recall)>0):
 				f = 2.0*precision*recall/(precision+recall)
-				result_f_score += f
+				result_f_score[t] += f
 		# print "count :", count
 		# print "precision :", precision
 	print "recall :", result_recall
@@ -204,5 +204,5 @@ for i in range(number_of_thresholds):
 f.close()
 
 plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result_precision)
-plt.axis([0.2, 0.6, 0, 0.6])
+plt.axis([0.0, 1.0, 0.0, 1.0])
 plt.show()

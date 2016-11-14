@@ -35,7 +35,7 @@ def getGenreVector(genreString):
 	return vec
 
 def getThreshold(t):
-	return 0.20+(t*0.4/(number_of_thresholds-1))
+	return (t*1.0/(number_of_thresholds-1))
 
 def parse(path): 
 	f = open(path)
@@ -63,10 +63,10 @@ def calcuate_similarity(pivot_table, user_data, product_data, i, j):
 #create pandas dataframe
 
 
-df = pd.read_csv('ml-1m/ratings.dat', header=None, names=['reviewerID', 'movieID', 'overall', 'unixReviewTime'], sep=':+', engine='python')
+df = pd.read_csv('dataset/ml-1m/ratings.dat', header=None, names=['reviewerID', 'movieID', 'overall', 'unixReviewTime'], sep=':+', engine='python')
 df.sort_values('unixReviewTime')
 
-movieDF = pd.read_csv('ml-1m/movies.dat', header=None, names=['movieID', 'name', 'genre'], sep='::', engine='python')
+movieDF = pd.read_csv('dataset/ml-1m/movies.dat', header=None, names=['movieID', 'name', 'genre'], sep='::', engine='python')
 
 #create product data
 product_data = pd.DataFrame(df.groupby('movieID')['overall'].agg([np.mean, np.std, 'count'])).fillna(1)
@@ -113,7 +113,9 @@ print product_data.describe();
 print len(product_data);
 number_of_sim_users = 5
 
-result = np.zeros((number_of_thresholds), dtype=np.float64);
+result_precision = np.zeros((number_of_thresholds), dtype=np.float64);
+result_recall = np.zeros((number_of_thresholds), dtype=np.float64);
+result_f_score = np.zeros((number_of_thresholds), dtype=np.float64);
 
 for target in range(len(accepted_users)):		
 	X = []
@@ -141,7 +143,9 @@ print dense_table
 
 for target in range(len(accepted_users)):
 	print "target :", target
-	sim = np.array([calcuate_similarity(dense_table, user_data, product_data, target, x) for x in range(len(accepted_users))])
+	sim = np.zeros((len(accepted_users)), dtype=np.float64)
+	for x in range(len(accepted_users)):
+		sim[x] = calcuate_similarity(dense_table, user_data, product_data, target, x)
 	sim_users = np.argpartition(sim, -number_of_sim_users)[-number_of_sim_users:]
 
 	purchase_record = set([])
@@ -159,47 +163,54 @@ for target in range(len(accepted_users)):
 		for u in sim_users:
 			if(dense_table[u][purchase_record[i]]!=0):
 				recommend_prob[i] += sim[u]*(dense_table[u][purchase_record[i]]-user_data.iloc[u, 0])
-				weight_sum += sim[u]
+				weight_sum[i] += sim[u]
 
 	for i in range(len(purchase_record)):
 		recommend_prob[i] = user_data.iloc[target, 0] + recommend_prob[i]/weight_sum[i]
 
-	recommend_prob = np.true_divide(recommend_prob, 5)
+	min_rating = recommend_prob.min()
+	max_rating = recommend_prob.max()
+	recommend_prob = np.subtract(recommend_prob, min_rating)
+	recommend_prob = np.true_divide(recommend_prob, (max_rating - min_rating))
 
 	# print recommend_prob.mean(), recommend_prob.min(), recommend_prob.max()
 	for t in range(number_of_thresholds):
 		threshold = getThreshold(t)
-		
 		recommendation_list = np.where(recommend_prob>threshold)[0]
-		print len(recommendation_list)
-		# print "after puchase len :", len(after[after.reviewerID==rows[target]])
-		# print "recommendation len :", len(recommendation_list)
-		# print "threshold :", threshold
-
-		count=0;
+		count=0
+		after_purchased_count = len(after[after.reviewerID==rows[target]])
 		for x in recommendation_list:
 			if(len(after[(after.reviewerID==rows[target]) & (after.movieID==cols[purchase_record[x]])])>0):
 				count+=1
-
+		print t, count, len(recommendation_list)
 		if len(recommendation_list)>0 :
 			precision = count*1.0/len(recommendation_list)
-			result[t] += precision
+			result_precision[t] += precision
+			recall = count*1.0/after_purchased_count
+			result_recall[t] += recall
+			if recall>1:
+				print "recall"
+			if((precision+recall)>0):
+				f = 2.0*precision*recall/(precision+recall)
+				result_f_score[t] += f
 		# print "count :", count
 		# print "precision :", precision
 
-	if target>50:
+	if target>=50:
 		break;
 
-result = np.true_divide(result, 50)
+result_precision = np.true_divide(result_precision, 51)
+result_recall = np.true_divide(result_recall, 51)
+result_f_score = np.true_divide(result_recall, 51)
 
 f = open('hybrid.csv', 'w+')
 for i in range(number_of_thresholds):
-	s = str(getThreshold(i))+", "+str(result[i])+"\n"
+	s = str(getThreshold(i))+", "+str(result_precision[i])+", "+str(result_recall[i])+", "+str(result_f_score[i])+"\n"
 	f.write(s)
 f.close()
 
-plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result)
-plt.axis([0.2, 0.6, 0, 0.6])
+plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result_precision)
+plt.axis([0.0, 1.0, 0.0, 1.0])
 plt.show()
 
 
