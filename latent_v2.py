@@ -70,8 +70,8 @@ user_df = pd.read_csv('dataset/ml-1m/users.dat',
 
 #create product data
 product_data = pd.DataFrame(df.groupby('movieID')['overall'].agg([np.mean, np.std, 'count'])).fillna(1)
-print "product data", len(product_data);
-print product_data.describe();
+# print "product data", len(product_data);
+# print product_data.describe();
 
 split_time = df['unixReviewTime'].quantile([.75])[0.75]
 
@@ -81,18 +81,20 @@ before = df[df.unixReviewTime<=split_time]
 user_before = before.reviewerID.unique().tolist()
 user_after = after.reviewerID.unique().tolist()
 
-latent_users = list(set(user_after)-set(user_before))
+# latent_users = list(set(user_after)-set(user_before))
 
 after_user_data = pd.DataFrame(after.groupby('reviewerID')['overall'].agg(['count']))
-latent_users_df = after_user_data.loc[latent_users]
 
-print latent_users_df.describe()
 
 #create user data
 user_data = pd.DataFrame(before.groupby('reviewerID')['overall'].agg([np.mean, np.std, 'count'])).fillna(1)
-print "user_data"
-print user_data.describe();
-user_data = user_data[user_data['count'] > 4]
+# print "user_data"
+# print user_data.describe();
+latent_users_df = user_data[user_data['count'] <= 10]
+latent_users = latent_users_df.index.tolist()
+user_data = user_data[user_data['count'] > 10]
+print "latent data"
+print latent_users_df.describe()
 
 #convert before dataframe to numpy array
 numpy_array = before.as_matrix(['reviewerID', 'movieID', 'overall'])
