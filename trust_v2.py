@@ -37,11 +37,16 @@ def calcuate_similarity(pivot_table, user_data, product_data, i, j):
 	w_lambda=0.5
 	normalize_freq = np.std(product_data['count'].values, axis=0, ddof=0)
 	common = (pivot_table[i]*pivot_table[j]).nonzero()
-	val=0
-	for k in common[0]:
-		diff= ( pivot_table[i][k]-user_data.iloc[i, 0] )*( pivot_table[j][k]-user_data.iloc[j, 0] )
-		val0= w_lambda/(product_data.iloc[k, 0]**2)+ (1-w_lambda)/( (product_data.iloc[k, 2]/normalize_freq)**2)
-		val = val+ math.sqrt(val0) * diff
+
+	rating_i = pivot_table[i][common[0]]
+	rating_j = pivot_table[j][common[0]]
+	rating_i = rating_i - user_data.iloc[i, 0]
+	rating_j = rating_j - user_data.iloc[j, 0]
+	variance = rating_i*rating_j
+
+	reputation = product_data.iloc[common[0], 0].as_matrix()/5
+	frequency = product_data.iloc[common[0], 2]/normalize_freq
+	val = np.sum(np.sqrt(w_lambda*np.square(np.reciprocal(reputation))+(1-w_lambda)*np.square(np.reciprocal(frequency))))
 	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
 
 #create pandas dataframe
