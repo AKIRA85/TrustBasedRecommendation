@@ -31,10 +31,14 @@ def calcuate_similarity(pivot_table, user_data, product_data, i, j):
 	if i==j:
 		return 0
 	common = (pivot_table[i]*pivot_table[j]).nonzero()
-	val=0
-	for k in common[0]:
-		diff= ( pivot_table[i][k]-user_data.iloc[i, 0] )*( pivot_table[j][k]-user_data.iloc[j, 0] )
-		val = val+diff
+
+	rating_i = pivot_table[i][common[0]]
+	rating_j = pivot_table[j][common[0]]
+	rating_i = rating_i - user_data.iloc[i, 0]
+	rating_j = rating_j - user_data.iloc[j, 0]
+	variance = rating_i*rating_j
+
+	val = np.sum(variance)
 	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
 
 #create pandas dataframe
@@ -137,16 +141,13 @@ for target in range(len(accepted_users)):
 			recall = count*1.0/after_purchased_count
 			result_recall[t] += recall
 			# print count, after_purchased_count, len(recommendation_list)
-			if((precision+recall)>0):
-				f = 2.0*precision*recall/(precision+recall)
-				result_f_score[t] += f
 
 	if target>=50:
 		break;
 
-result_precision = np.true_divide(result_precision, 51)
-result_recall = np.true_divide(result_recall, 51)
-result_f_score = np.true_divide(result_recall, 51)
+np.copyto(result_precision, np.true_divide(result_precision, 51))
+np.copyto(result_recall, np.true_divide(result_recall, 51))
+np.copyto(result_f_score, np.divide(2*result_precision*result_recall, result_precision+result_recall))
 
 f = open('collab_wrt_list_len.csv', 'w+')
 for i in range(number_of_thresholds):
@@ -154,9 +155,6 @@ for i in range(number_of_thresholds):
 	f.write(s)
 f.close()
 
-plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result_precision)
-plt.axis([5.0, 50.0, 0.0, 1.0])
-plt.show()
 
 
 

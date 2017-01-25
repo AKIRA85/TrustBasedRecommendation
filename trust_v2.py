@@ -1,7 +1,5 @@
 import pandas as pd 
-import matplotlib.pyplot as plt
 import numpy as np
-import networkx as nx
 import json
 import math
 
@@ -9,7 +7,9 @@ number_of_thresholds = 10
 number_of_products = 200
 number_of_sim_users = 5
 alpha = 0.5
+w_lambda = 1
 step = 5
+p = 0.2
 
 def getThreshold(t):
 	return 5*(t+1)
@@ -31,11 +31,10 @@ def getDF(path):
 		i += 1
 	return pd.DataFrame.from_dict(df, orient='index') 
 
-def calcuate_similarity(pivot_table, user_data, product_data, i, j):
+def calcuate_similarity(pivot_table, user_data, product_data, i, j, w_lambda):
 	if i==j:
 		return 0
-	w_lambda=0.5
-	normalize_freq = np.std(product_data['count'].values, axis=0, ddof=0)
+	normalize_freq = np.max(product_data['count'].values)
 	common = (pivot_table[i]*pivot_table[j]).nonzero()
 
 	rating_i = pivot_table[i][common[0]]
@@ -64,8 +63,6 @@ df.sort_values('unixReviewTime')
 
 #create product data
 product_data = pd.DataFrame(df.groupby('productID')['overall'].agg([np.mean, np.std, 'count'])).fillna(1)
-top_product = product_data.sort_values('count').tail(number_of_products).index.values
-df = df[df.productID.isin(top_product)]
 print "no. of reviewes :", len(df)
 
 split_time = df['unixReviewTime'].quantile([.75])[0.75]
@@ -106,7 +103,7 @@ result_f_score = np.zeros((number_of_thresholds), dtype=np.float64);
 
 for target in range(len(accepted_users)):
 	print "target :", target
-	sim = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x) for x in range(len(accepted_users))])	
+	sim = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x, w_lambda) for x in range(len(accepted_users))])	
 	sim_users = np.argpartition(sim, -number_of_sim_users)[-number_of_sim_users:]
 	sim_users = np.append(sim_users, [target])
 
@@ -145,7 +142,6 @@ for target in range(len(accepted_users)):
 
 	corelation_matrix = np.reciprocal(np.add(1, np.exp(np.negative(corelation_matrix))))
 
-	p = 0.5
 	transfer_matrix = p*transition_matrix + (1-p)*corelation_matrix;
 	last_three_purchase = before[before.reviewerID==rows[target]].tail(3)
 	recent_products = [purchase_record.index(np.where(cols == x)[0][0]) for x in last_three_purchase['productID'].tolist()]
@@ -158,8 +154,8 @@ for target in range(len(accepted_users)):
 	recommend_prob = np.true_divide(recommend_prob, len(recent_products))
 
 	#include trust
-	for x in range(len(purchase_record)):
-		recommend_prob[x] = alpha*recommend_prob[x] + (1 - alpha)*product_data.iloc[purchase_record[x], 3]
+	# for x in range(len(purchase_record)):
+	# 	recommend_prob[x] = alpha*recommend_prob[x] + (1 - alpha)*product_data.iloc[purchase_record[x], 3]
 	# print recommend_prob.mean(), recommend_prob.min(), recommend_prob.max()
 	for t in range(number_of_thresholds):
 		threshold = getThreshold(t)
@@ -174,22 +170,15 @@ for target in range(len(accepted_users)):
 			result_precision[t] += precision
 			recall = count*1.0/after_purchased_count
 			result_recall[t] += recall
-			if((precision+recall)>0):
-				f = 2.0*precision*recall/(precision+recall)
-				result_f_score[t] += f
 	if target>=50:
 		break;
 
-result_precision = np.true_divide(result_precision, 51)
-result_recall = np.true_divide(result_recall, 51)
-result_f_score = np.true_divide(result_recall, 51)
+np.copyto(result_precision, np.true_divide(result_precision, 51))
+np.copyto(result_recall, np.true_divide(result_recall, 51))
+np.copyto(result_f_score, np.divide(2*result_precision*result_recall, result_precision+result_recall))
 
-f = open('with_trust_5_wrt_list_len.csv', 'w+')
+f = open('without_trust_5_wrt_list_len.csv', 'w+')
 for i in range(number_of_thresholds):
 	s = str(getThreshold(i))+", "+str(result_precision[i])+", "+str(result_recall[i])+", "+str(result_f_score[i])+"\n"
 	f.write(s)
 f.close()
-
-plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result_precision)
-plt.axis([5.0, 50.0, 0.0, 1.0])
-plt.show()
