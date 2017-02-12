@@ -1,7 +1,5 @@
 import pandas as pd 
-import matplotlib.pyplot as plt
 import numpy as np
-import networkx as nx
 import json
 import math
 
@@ -9,7 +7,7 @@ number_of_thresholds = 10
 number_of_products = 200
 number_of_sim_users = 5
 alpha = 0.3
-step = 2
+step = 5
 
 def getThreshold(t):
 	return step*(t+1)
@@ -42,16 +40,16 @@ def calcuate_similarity(pivot_table, user_data, product_data, i, j):
 	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
 
 #create pandas dataframe
-df = pd.read_csv('dataset/ratings_Electronics_compressed.csv', 
-	header=None, 
-	names=['reviewerID', 'productID', 'overall', 'unixReviewTime'], 
-	sep=',', 
-	dtype={'reviewerID':int, 'productID':int, 'overall':int, 'unixReviewTime':int})
-# df = pd.read_csv('dataset/ml-1m/ratings.dat', 
-# 				header=None, 
-# 				names=['reviewerID', 'productID', 'overall', 'unixReviewTime'], 
-# 				sep=':+', 
-# 				engine='python')
+# df = pd.read_csv('dataset/ratings_Electronics_compressed.csv', 
+# 	header=None, 
+# 	names=['reviewerID', 'productID', 'overall', 'unixReviewTime'], 
+# 	sep=',', 
+# 	dtype={'reviewerID':int, 'productID':int, 'overall':int, 'unixReviewTime':int})
+df = pd.read_csv('dataset/ml-1m/ratings.dat', 
+				header=None, 
+				names=['reviewerID', 'productID', 'overall', 'unixReviewTime'], 
+				sep=':+', 
+				engine='python')
 df.sort_values('unixReviewTime')
 
 #create product data

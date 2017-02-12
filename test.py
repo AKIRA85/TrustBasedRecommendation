@@ -1,7 +1,5 @@
 import pandas as pd 
-import matplotlib.pyplot as plt
 import numpy as np
-import networkx as nx
 import json
 import math
 from sklearn import preprocessing
@@ -9,7 +7,10 @@ from sklearn import preprocessing
 number_of_thresholds = 10
 number_of_products = 200
 number_of_sim_users = 5
-alpha = 0.5
+w_lambda = 0.9
+p = 0.2
+sigma = 0.9
+alpha = 0.9
 step = 5
 
 genre = dict()
@@ -45,8 +46,7 @@ def getGenreVector(genreString):
 		vec[genre[s]]=1
 	return pd.Series(vec)
 
-def calculate_trust(row, max_freq):
-	sigma = 0.5;
+def calculate_trust(row, max_freq, sigma):
 	return (sigma*row['mean'])/5+((1-sigma)*row['count'])/max_freq
 
 def normalizeVector(row):
@@ -54,20 +54,22 @@ def normalizeVector(row):
 	rms = np.sqrt(np.sum(np.square(genre_vector)))
 	return pd.Series(np.true_divide(genre_vector, rms))
 
-
-def calcuate_similarity(pivot_table, user_data, product_data, i, j):
+def calcuate_similarity(pivot_table, user_data, product_data, i, j, w_lambda):
 	if i==j:
 		return 0
-	w_lambda=0.5
-	normalize_freq = np.std(product_data['count'].values, axis=0, ddof=0)
+	normalize_freq = np.max(product_data['count'].values)
 	common = (pivot_table[i]*pivot_table[j]).nonzero()
-	val=0
-	for k in common[0]:
-		diff= ( pivot_table[i][k]-user_data.iloc[i, 0] )*( pivot_table[j][k]-user_data.iloc[j, 0] )
-		val0= w_lambda/(product_data.iloc[k, 0]**2)+ (1-w_lambda)/( (product_data.iloc[k, 2]/normalize_freq)**2)
-		val = val+ math.sqrt(val0) * diff
-	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
 
+	rating_i = pivot_table[i][common[0]]
+	rating_j = pivot_table[j][common[0]]
+	rating_i = rating_i - user_data.iloc[i, 0]
+	rating_j = rating_j - user_data.iloc[j, 0]
+	variance = rating_i*rating_j
+
+	reputation = product_data.iloc[common[0], 0].as_matrix()/5
+	frequency = product_data.iloc[common[0], 2]/normalize_freq
+	val = np.sum(np.sqrt(w_lambda*np.square(np.reciprocal(reputation))+(1-w_lambda)*np.square(np.reciprocal(frequency)))*variance)
+	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
 
 #Read ratings data
 df = pd.read_csv('dataset/ml-1m/ratings.dat', 
@@ -142,7 +144,7 @@ pivot_table[row_pos, col_pos] = numpy_array[:, 2]
 
 #calculate trust
 max_fre = product_data['count'].max()
-product_data['trust'] = product_data.apply (lambda row: calculate_trust (row, max_fre),axis=1)
+product_data['trust'] = product_data.apply (lambda row: calculate_trust (row, max_fre, sigma),axis=1)
 
 print "No.of products :", len(product_data);
 
@@ -155,27 +157,27 @@ for target in range(len(accepted_users)):
 
 	#finding similar users based on genre
 	target_genre_vector = user_genre_vector.loc[accepted_users[target]].as_matrix()
-	sim = np.array([np.dot(target_genre_vector, user_genre_vector.loc[accepted_users[x]].as_matrix()) for x in range(len(accepted_users))])	
+	sim_genre = np.array([np.dot(target_genre_vector, user_genre_vector.loc[accepted_users[x]].as_matrix()) for x in range(len(accepted_users))])	
 	# genre_sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
-	genre_sim_users = np.argpartition(sim, -30)[-30:]
+	# genre_sim_users = np.argpartition(sim, -30)[-30:]
 
 	#finding similar users based on year
 	target_year_vector = user_year_vector.loc[accepted_users[target]].as_matrix()
-	sim = np.array([np.dot(target_year_vector, user_year_vector.loc[accepted_users[x]].as_matrix()) for x in genre_sim_users])
+	sim_year = np.array([np.dot(target_year_vector, user_year_vector.loc[accepted_users[x]].as_matrix()) for x in range(len(accepted_users))])
 	# sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
-	sim_users = np.argpartition(sim, -20)[-20:]
-	year_sim_users = genre_sim_users[sim_users]
+	# sim_users = np.argpartition(sim, -20)[-20:]
+	# year_sim_users = genre_sim_users[sim_users]
 
 	#finding similar users based on reviwe frequency
 	target_frequency = user_data.loc[accepted_users[target]].iloc[2]
-	sim = np.array([abs(target_frequency-user_data.loc[accepted_users[x]].iloc[2]) for x in year_sim_users])
+	sim_frequeny = np.array([abs(target_frequency-user_data.loc[accepted_users[x]].iloc[2]) for x in range(len(accepted_users))])
 	# sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
-	sim_users = np.argpartition(sim, -10)[-10:]
-	frequency_sim_users = year_sim_users[sim_users]
+	# sim_users = np.argpartition(sim, -10)[-10:]
+	# frequency_sim_users = year_sim_users[sim_users]
 
-	sim = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x) for x in frequency_sim_users])	
+	sim_rating = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x, w_lambda) for x in range(len(accepted_users))])	
+	sim = a1*sim_genre + a2*sim_year + a3*sim_frequeny + a4*sim_rating
 	sim_users = np.argpartition(sim, -number_of_sim_users)[-number_of_sim_users:]
-	sim_users = frequency_sim_users[sim_users]
 	sim_users = np.append(sim_users, [target])
 
 	purchase_count = {}
@@ -213,7 +215,6 @@ for target in range(len(accepted_users)):
 
 	corelation_matrix = np.reciprocal(np.add(1, np.exp(np.negative(corelation_matrix))))
 
-	p = 0.5
 	transfer_matrix = p*transition_matrix + (1-p)*corelation_matrix;
 	last_three_purchase = before[before.reviewerID==rows[target]].tail(3)
 	recent_products = [purchase_record.index(np.where(cols == x)[0][0]) for x in last_three_purchase['productID'].tolist()]
@@ -242,22 +243,15 @@ for target in range(len(accepted_users)):
 			result_precision[t] += precision
 			recall = count*1.0/after_purchased_count
 			result_recall[t] += recall
-			if((precision+recall)>0):
-				f = 2.0*precision*recall/(precision+recall)
-				result_f_score[t] += f
 	if target>=50:
 		break;
 
-result_precision = np.true_divide(result_precision, 51)
-result_recall = np.true_divide(result_recall, 51)
-result_f_score = np.true_divide(result_recall, 51)
+np.copyto(result_precision, np.true_divide(result_precision, 51))
+np.copyto(result_recall, np.true_divide(result_recall, 51))
+np.copyto(result_f_score, np.divide(2*result_precision*result_recall, result_precision+result_recall))
 
-f = open('demo_2.csv', 'w+')
+f = open('demo_with_optimized_parameters.csv', 'w+')
 for i in range(number_of_thresholds):
 	s = str(getThreshold(i))+", "+str(result_precision[i])+", "+str(result_recall[i])+", "+str(result_f_score[i])+"\n"
 	f.write(s)
 f.close()
-
-plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result_precision)
-plt.axis([5.0, 50.0, 0.0, 1.0])
-plt.show()

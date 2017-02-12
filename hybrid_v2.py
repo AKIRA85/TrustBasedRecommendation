@@ -1,8 +1,6 @@
 import pandas as pd 
-import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import svm
-import networkx as nx
 import json
 import math
 
@@ -175,9 +173,6 @@ for target in range(len(accepted_users)):
 			result_precision[t] += precision
 			recall = count*1.0/after_purchased_count
 			result_recall[t] += recall
-			if((precision+recall)>0):
-				f = 2.0*precision*recall/(precision+recall)
-				result_f_score[t] += f
 		print count, len(recommendation_list), after_purchased_count
 		# print "count :", count
 		# print "precision :", precision
@@ -185,19 +180,12 @@ for target in range(len(accepted_users)):
 	if target>=50:
 		break;
 
-result_precision = np.true_divide(result_precision, 51)
-result_recall = np.true_divide(result_recall, 51)
-result_f_score = np.true_divide(result_recall, 51)
+np.copyto(result_precision, np.true_divide(result_precision, 51))
+np.copyto(result_recall, np.true_divide(result_recall, 51))
+np.copyto(result_f_score, np.divide(2*result_precision*result_recall, result_precision+result_recall))
 
 f = open('hybrid_wrt_list_len.csv', 'w+')
 for i in range(number_of_thresholds):
 	s = str(getThreshold(i))+", "+str(result_precision[i])+", "+str(result_recall[i])+", "+str(result_f_score[i])+"\n"
 	f.write(s)
 f.close()
-
-plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result_precision)
-plt.axis([5.0, 50.0, 0.0, 1.0])
-plt.show()
-
-
-

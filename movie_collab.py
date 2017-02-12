@@ -1,7 +1,5 @@
 import pandas as pd 
-import matplotlib.pyplot as plt
 import numpy as np
-import networkx as nx
 import json
 import math
 
@@ -160,9 +158,6 @@ for i in range(number_of_thresholds):
 	f.write(s)
 f.close()
 
-plt.plot([getThreshold(i) for i in range(number_of_thresholds)], result_precision)
-plt.axis([0.0, 1.0, 0.0, 1.0])
-plt.show()
 
 
 

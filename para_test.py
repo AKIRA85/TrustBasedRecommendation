@@ -7,30 +7,52 @@ number_of_iterations = 11
 number_of_thresholds = 10
 number_of_products = 200
 number_of_sim_users = 5
-w_lambda = 0.9
-p = 0.2
+w_lambda = 0.5
+p = 0.5
 alpha = 0.5
 step = 5
-sigma = 0.9;
+
+genre = dict()
+genre['Action']=0
+genre['Adventure']=1
+genre['Animation']=2
+genre['Children\'s']=3
+genre['Comedy']=4
+genre['Crime']=5
+genre['Documentary']=6
+genre['Drama']=7
+genre['Fantasy']=8
+genre['Film-Noir']=9
+genre['Horror']=10
+genre['Musical']=11
+genre['Mystery']=12
+genre['Romance']=13
+genre['Sci-Fi']=14
+genre['Thriller']=15
+genre['War']=16
+genre['Western']=17
+
+genre_reverse = {v: k for k, v in genre.iteritems()}
+
+ranges = [x for x in range(1910, 2001, 10) ]
 
 def getThreshold(t):
 	return 5*(t+1)
 
-def calculate_trust(row, max_freq, sigma):
+def getGenreVector(genreString):
+	vec = [0]*len(genre)
+	for s in genreString.split('|'):
+		vec[genre[s]]=1
+	return pd.Series(vec)
+
+def calculate_trust(row, max_freq):
+	sigma = 0.5;
 	return (sigma*row['mean'])/5+((1-sigma)*row['count'])/max_freq
 
-def parse(path): 
-	f = open(path)
-	for line in f:
-		yield json.loads(line)
-
-def getDF(path): 
-	i = 0 
-	df = {} 
-	for d in parse(path): 
-		df[i] = d 
-		i += 1
-	return pd.DataFrame.from_dict(df, orient='index') 
+def normalizeVector(row):
+	genre_vector = row.as_matrix()
+	rms = np.sqrt(np.sum(np.square(genre_vector)))
+	return pd.Series(np.true_divide(genre_vector, rms))
 
 def calcuate_similarity(pivot_table, user_data, product_data, i, j, w_lambda):
 	if i==j:
@@ -49,24 +71,34 @@ def calcuate_similarity(pivot_table, user_data, product_data, i, j, w_lambda):
 	val = np.sum(np.sqrt(w_lambda*np.square(np.reciprocal(reputation))+(1-w_lambda)*np.square(np.reciprocal(frequency)))*variance)
 	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
 
-#create pandas dataframe
-# df = pd.read_csv('dataset/ratings_Electronics_compressed.csv', 
-# 	header=None, 
-# 	names=['reviewerID', 'productID', 'overall', 'unixReviewTime'], 
-# 	sep=',', 
-# 	dtype={'reviewerID':int, 'productID':int, 'overall':int, 'unixReviewTime':int})
+#Read ratings data
 df = pd.read_csv('dataset/ml-1m/ratings.dat', 
 				header=None, 
 				names=['reviewerID', 'productID', 'overall', 'unixReviewTime'], 
 				sep=':+', 
-				engine='python')
+				engine='python',)
 df.sort_values('unixReviewTime')
 
-#create product data
+#Read movie data
+movieDF = pd.read_csv('dataset/ml-1m/movies.dat', 
+			header=None, 
+			names=['productID', 'name', 'genre'], 
+			sep='::', 
+			engine='python')
+
+print "Finished reading data"
+
+#create product data and filter top products
 product_data = pd.DataFrame(df.groupby('productID')['overall'].agg([np.mean, np.std, 'count'])).fillna(1)
 top_product = product_data.sort_values('count').tail(number_of_products).index.values
 df = df[df.productID.isin(top_product)]
-print "no. of reviewes :", len(df)
+print "Created product data"
+
+genre_list = sorted(genre.keys())
+newcols = movieDF['genre'].apply(getGenreVector)
+newcols.columns = genre_list
+movieDF = movieDF.join(newcols)
+movieDF['year'] = movieDF['name'].apply(lambda x: (int(x[-5:-1])/10)*10)
 
 split_time = df['unixReviewTime'].quantile([.75])[0.75]
 after = df[df.unixReviewTime>split_time]
@@ -76,12 +108,28 @@ user_before = before.reviewerID.unique().tolist()
 user_after = after.reviewerID.unique().tolist()
 common_users = set(user_before).intersection(set(user_after))
 before = before[before.reviewerID.isin(common_users)]
+before = pd.merge(before, movieDF, on='productID')
 
 #create user data
 user_data = pd.DataFrame(before.groupby('reviewerID')['overall'].agg([np.mean, np.std, 'count'])).fillna(1)
-user_data = user_data[user_data['count'] > 4]
+print "Created user data"
+
+#creating genre vector
+user_genre_vector = pd.DataFrame(before.groupby('reviewerID')[genre_list].sum()).fillna(1)
+user_genre_vector = user_genre_vector.apply(normalizeVector, axis=1)
+user_genre_vector = user_genre_vector.rename(columns=genre_reverse)
+
+#creating year vector
+user_year_vector = before.pivot_table(index='reviewerID', values=[], columns='year', aggfunc=len, fill_value=0)
+year_columns = user_year_vector.columns.values
+year_columns_dict = {i:year_columns[i] for i in range(len(year_columns))}
+user_year_vector = user_year_vector.apply(normalizeVector, axis=1)
+user_year_vector = user_year_vector.rename(columns=year_columns_dict)
+
+
+user_data = user_data[user_data['count'] > 10]
 accepted_users = user_data.index.values
-print "no. of users :", len(accepted_users)
+print "no. of accepted users :", len(accepted_users)
 before = before[before.reviewerID.isin(accepted_users)]
 
 #convert before dataframe to numpy array
@@ -94,6 +142,10 @@ cols, col_pos = np.unique(numpy_array[:, 1], return_inverse=True)
 pivot_table = np.zeros((len(rows), len(cols)), dtype=numpy_array.dtype)
 pivot_table[row_pos, col_pos] = numpy_array[:, 2]
 
+#calculate trust
+max_fre = product_data['count'].max()
+product_data['trust'] = product_data.apply (lambda row: calculate_trust (row, max_fre),axis=1)
+
 print "No.of products :", len(product_data);
 
 result_precision = np.zeros((number_of_iterations, number_of_thresholds), dtype=np.float64);
@@ -101,20 +153,36 @@ result_recall = np.zeros((number_of_iterations, number_of_thresholds), dtype=np.
 result_f_score = np.zeros((number_of_iterations, number_of_thresholds), dtype=np.float64);
 
 for iteration in range(0, number_of_iterations):
-	alpha = iteration*0.1
+	w_lambda = iteration*0.1
 	print "\niteration :", iteration
-
-	#calculate trust
-	max_fre = product_data['count'].max()
-	product_data['trust'] = product_data.apply (lambda row: calculate_trust (row, max_fre, sigma),axis=1)
-
 	for target in range(len(accepted_users)):
 		if target%10==0:
 			print target
 		else:
 			print target,
-		sim = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x, w_lambda) for x in range(len(accepted_users))])	
+		#finding similar users based on genre
+		target_genre_vector = user_genre_vector.loc[accepted_users[target]].as_matrix()
+		sim = np.array([np.dot(target_genre_vector, user_genre_vector.loc[accepted_users[x]].as_matrix()) for x in range(len(accepted_users))])	
+		# genre_sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
+		genre_sim_users = np.argpartition(sim, -30)[-30:]
+
+		#finding similar users based on year
+		target_year_vector = user_year_vector.loc[accepted_users[target]].as_matrix()
+		sim = np.array([np.dot(target_year_vector, user_year_vector.loc[accepted_users[x]].as_matrix()) for x in genre_sim_users])
+		# sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
+		sim_users = np.argpartition(sim, -20)[-20:]
+		year_sim_users = genre_sim_users[sim_users]
+
+		#finding similar users based on reviwe frequency
+		target_frequency = user_data.loc[accepted_users[target]].iloc[2]
+		sim = np.array([abs(target_frequency-user_data.loc[accepted_users[x]].iloc[2]) for x in year_sim_users])
+		# sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
+		sim_users = np.argpartition(sim, -10)[-10:]
+		frequency_sim_users = year_sim_users[sim_users]
+
+		sim = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x, w_lambda) for x in frequency_sim_users])	
 		sim_users = np.argpartition(sim, -number_of_sim_users)[-number_of_sim_users:]
+		sim_users = frequency_sim_users[sim_users]
 		sim_users = np.append(sim_users, [target])
 
 		purchase_count = {}
@@ -162,7 +230,7 @@ for iteration in range(0, number_of_iterations):
 
 		recommend_prob = np.true_divide(recommend_prob, len(recent_products))
 
-		# include trust
+		#include trust
 		for x in range(len(purchase_record)):
 			recommend_prob[x] = alpha*recommend_prob[x] + (1 - alpha)*product_data.iloc[purchase_record[x], 3]
 		# print recommend_prob.mean(), recommend_prob.min(), recommend_prob.max()
@@ -188,7 +256,7 @@ for iteration in range(0, number_of_iterations):
 		np.divide(2*result_precision[iteration]*result_recall[iteration], 
 			result_precision[iteration]+result_recall[iteration]))
 
-f = open('vary_alpha_trust.csv', 'w+')
+f = open('vary_lambda_demo.csv', 'w+')
 separator = ", "
 
 f.write("Recommendation list length, "+separator.join(map(str, [i for i in np.arange(0, 1.1, 0.1)]))+"\n")
