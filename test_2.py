@@ -7,7 +7,6 @@ from sklearn import preprocessing
 number_of_thresholds = 10
 number_of_products = 200
 number_of_sim_users = 5
-number_of_users = 11
 w_lambda = 0.9
 p = 0.2
 sigma = 0.9
@@ -184,7 +183,6 @@ for target in range(len(accepted_users)):
 	sim = k_genre*sim_genre + k_year*sim_year + k_frequency*sim_frequeny + k_rating*sim_rating
 	sim_users = np.argpartition(sim, -number_of_sim_users)[-number_of_sim_users:]
 	sim_users = np.append(sim_users, [target])
-	print sim_users
 
 	purchase_count = {}
 	for u in sim_users:
@@ -199,6 +197,7 @@ for target in range(len(accepted_users)):
 	purchase_record = purchase_count.keys()
 	print "No. of candidate products : ", len(purchase_record)
 
+	print sim_users
 	for u in sim_users:
 		user_purchase = pd.DataFrame(before[before['reviewerID']==rows[u]].sort_values('unixReviewTime'))
 		purchase_transition = user_purchase['productID'].tolist()
@@ -249,11 +248,11 @@ for target in range(len(accepted_users)):
 			result_precision[t] += precision
 			recall = count*1.0/after_purchased_count
 			result_recall[t] += recall
-	if target>number_of_users:
+	if target>=10:
 		break;
 
-np.copyto(result_precision, np.true_divide(result_precision, number_of_users))
-np.copyto(result_recall, np.true_divide(result_recall, number_of_users))
+np.copyto(result_precision, np.true_divide(result_precision, 51))
+np.copyto(result_recall, np.true_divide(result_recall, 51))
 np.copyto(result_f_score, np.divide(2*result_precision*result_recall, result_precision+result_recall))
 
 f = open('demo_weighted sum_similarity_2.csv', 'w+')

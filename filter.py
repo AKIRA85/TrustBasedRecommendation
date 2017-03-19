@@ -59,6 +59,7 @@ def normalizeVector(row):
 	rms = np.sqrt(np.sum(np.square(genre_vector)))
 	return pd.Series(np.true_divide(genre_vector, rms))
 
+# trust similarity fuction
 def calcuate_similarity(pivot_table, user_data, product_data, i, j, w_lambda):
 	if i==j:
 		return 0
@@ -75,6 +76,20 @@ def calcuate_similarity(pivot_table, user_data, product_data, i, j, w_lambda):
 	frequency = product_data.iloc[common[0], 2]/normalize_freq
 	val = np.sum(np.sqrt(w_lambda*np.square(np.reciprocal(reputation))+(1-w_lambda)*np.square(np.reciprocal(frequency)))*variance)
 	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
+
+# collab similarity fuction
+# def calcuate_similarity(pivot_table, user_data, product_data, i, j, w_lambda):
+# 	if i==j:
+# 		return 0
+# 	common = (pivot_table[i]*pivot_table[j]).nonzero()
+# 	rating_i = pivot_table[i][common[0]]
+# 	rating_j = pivot_table[j][common[0]]
+# 	rating_i = rating_i - user_data.iloc[i, 0]
+# 	rating_j = rating_j - user_data.iloc[j, 0]
+# 	variance = rating_i*rating_j
+
+# 	val = np.sum(variance)
+# 	return val/ ( max(user_data.iloc[i, 1], 1)*max(user_data.iloc[j, 1], 1) )
 
 #Read ratings data
 df = pd.read_csv('dataset/ml-1m/ratings.dat', 
@@ -132,7 +147,7 @@ user_year_vector = user_year_vector.apply(normalizeVector, axis=1)
 user_year_vector = user_year_vector.rename(columns=year_columns_dict)
 
 
-user_data = user_data[user_data['count'] > 10]
+user_data = user_data[user_data['count'] > 4]
 accepted_users = user_data.index.values
 print "no. of accepted users :", len(accepted_users)
 before = before[before.reviewerID.isin(accepted_users)]
@@ -157,34 +172,46 @@ result_precision = np.zeros((number_of_thresholds), dtype=np.float64);
 result_recall = np.zeros((number_of_thresholds), dtype=np.float64);
 result_f_score = np.zeros((number_of_thresholds), dtype=np.float64);
 
+user_file = open('new_method_users.csv', 'w+')
+product_file = open('new_method_product.csv', 'w+')
+
 for target in range(len(accepted_users)):
 	print "target :", target
 
+	user_file.write(str(target)+"-"+str(accepted_users[target])+" :\n")
+
+	#finding similar users based on rating
+	sim_rating = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x, w_lambda) for x in range(len(accepted_users))])	
+	rating_sim_users = np.argpartition(sim_rating, -30)[-30:]
+	user_str = ', '.join(map(str, rating_sim_users))+"\n"
+	user_file.write(user_str)
+
 	#finding similar users based on genre
 	target_genre_vector = user_genre_vector.loc[accepted_users[target]].as_matrix()
-	sim_genre = np.array([np.dot(target_genre_vector, user_genre_vector.loc[accepted_users[x]].as_matrix()) for x in range(len(accepted_users))])	
-	# genre_sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
-	# genre_sim_users = np.argpartition(sim, -30)[-30:]
+	sim_genre = np.array([np.dot(target_genre_vector, user_genre_vector.loc[accepted_users[x]].as_matrix()) for x in rating_sim_users])	
+	sim_users = np.argpartition(sim_genre, -20)[-20:]
+	genre_sim_users = rating_sim_users[sim_users]
+	user_str = ', '.join(map(str, genre_sim_users))+"\n"
+	user_file.write(user_str)
 
 	#finding similar users based on year
 	target_year_vector = user_year_vector.loc[accepted_users[target]].as_matrix()
-	sim_year = np.array([np.dot(target_year_vector, user_year_vector.loc[accepted_users[x]].as_matrix()) for x in range(len(accepted_users))])
-	# sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
-	# sim_users = np.argpartition(sim, -20)[-20:]
-	# year_sim_users = genre_sim_users[sim_users]
+	sim_year = np.array([np.dot(target_year_vector, user_year_vector.loc[accepted_users[x]].as_matrix()) for x in genre_sim_users])
+	sim_users = np.argpartition(sim_year, -10)[-10:]
+	year_sim_users = genre_sim_users[sim_users]
+	user_str = ', '.join(map(str, year_sim_users))+"\n"
+	user_file.write(user_str)
 
 	#finding similar users based on reviwe frequency
 	target_frequency = user_data.loc[accepted_users[target]].iloc[2]
-	sim_frequeny = np.array([abs(target_frequency-user_data.loc[accepted_users[x]].iloc[2]) for x in range(len(accepted_users))])
-	# sim_users = np.argpartition(sim, -len(sim)/2)[-len(sim)/2:]
-	# sim_users = np.argpartition(sim, -10)[-10:]
-	# frequency_sim_users = year_sim_users[sim_users]
+	sim_frequeny = np.array([abs(target_frequency-user_data.loc[accepted_users[x]].iloc[2]) for x in year_sim_users])
+	sim_users = np.argpartition(sim_frequeny, -5)[-5:]
+	frequency_sim_users = year_sim_users[sim_users]
 
-	sim_rating = np.array([calcuate_similarity(pivot_table, user_data, product_data, target, x, w_lambda) for x in range(len(accepted_users))])	
-	sim = k_genre*sim_genre + k_year*sim_year + k_frequency*sim_frequeny + k_rating*sim_rating
-	sim_users = np.argpartition(sim, -number_of_sim_users)[-number_of_sim_users:]
-	sim_users = np.append(sim_users, [target])
-	print sim_users
+	user_str = ', '.join(map(str, frequency_sim_users))+"\n"
+	user_file.write(user_str)
+
+	sim_users = np.append(frequency_sim_users, [target])
 
 	purchase_count = {}
 	for u in sim_users:
@@ -198,6 +225,21 @@ for target in range(len(accepted_users)):
 	corelation_matrix=np.zeros((len(purchase_count),len(purchase_count)),dtype=np.float64 )
 	purchase_record = purchase_count.keys()
 	print "No. of candidate products : ", len(purchase_record)
+	# recommend_prob = np.zeros((len(purchase_record)), dtype=np.float64)
+	# weight_sum = np.zeros((len(purchase_record)), dtype=np.float64)
+
+	# for i in range(len(purchase_record)):
+	# 	for u in sim_users:
+	# 		if(pivot_table[u][purchase_record[i]]!=0):
+	# 			recommend_prob[i] += sim_rating[u]*(pivot_table[u][purchase_record[i]]-user_data.iloc[u, 0])
+	# 			weight_sum[i] += sim_rating[u]
+
+	# for i in range(len(purchase_record)):
+	# 	recommend_prob[i] = user_data.iloc[target, 0] + recommend_prob[i]/weight_sum[i]
+	# min_rating = recommend_prob.min()
+	# max_rating = recommend_prob.max()
+	# recommend_prob = np.subtract(recommend_prob, min_rating)
+	# recommend_prob = np.true_divide(recommend_prob, (max_rating - min_rating))
 
 	for u in sim_users:
 		user_purchase = pd.DataFrame(before[before['reviewerID']==rows[u]].sort_values('unixReviewTime'))
@@ -222,20 +264,25 @@ for target in range(len(accepted_users)):
 	corelation_matrix = np.reciprocal(np.add(1, np.exp(np.negative(corelation_matrix))))
 
 	transfer_matrix = p*transition_matrix + (1-p)*corelation_matrix;
+	# transfer_matrix = transition_matrix;
 	last_three_purchase = before[before.reviewerID==rows[target]].tail(3)
 	recent_products = [purchase_record.index(np.where(cols == x)[0][0]) for x in last_three_purchase['productID'].tolist()]
 
 	recommend_prob = np.zeros((len(purchase_record)), dtype=np.float64)
+
+	product_str = str(target)+"-"+str(accepted_users[target])+" : "+(', '.join(map(str, np.argsort(recommend_prob)[-30:])))+"\n"
+	product_file.write(product_str)
 
 	for x in recent_products:
 		recommend_prob = recommend_prob + transfer_matrix[x]
 
 	recommend_prob = np.true_divide(recommend_prob, len(recent_products))
 
-	#include trust
+	# include trust
 	for x in range(len(purchase_record)):
+		recommend_prob[x] = product_data.iloc[purchase_record[x], 3]
 		recommend_prob[x] = alpha*recommend_prob[x] + (1 - alpha)*product_data.iloc[purchase_record[x], 3]
-	# print recommend_prob.mean(), recommend_prob.min(), recommend_prob.max()
+	print recommend_prob.mean(), recommend_prob.min(), recommend_prob.max()
 	for t in range(number_of_thresholds):
 		threshold = getThreshold(t)
 		recommendation_list = np.argpartition(recommend_prob, -threshold)[-threshold:]
@@ -249,14 +296,16 @@ for target in range(len(accepted_users)):
 			result_precision[t] += precision
 			recall = count*1.0/after_purchased_count
 			result_recall[t] += recall
-	if target>number_of_users:
-		break;
+	if target>=(number_of_users-1):
+		break
 
+user_file.close()
+product_file.close()
 np.copyto(result_precision, np.true_divide(result_precision, number_of_users))
 np.copyto(result_recall, np.true_divide(result_recall, number_of_users))
 np.copyto(result_f_score, np.divide(2*result_precision*result_recall, result_precision+result_recall))
 
-f = open('demo_weighted sum_similarity_2.csv', 'w+')
+f = open('demo_filter_similarity_reverse.csv', 'w+')
 for i in range(number_of_thresholds):
 	s = str(getThreshold(i))+", "+str(result_precision[i])+", "+str(result_recall[i])+", "+str(result_f_score[i])+"\n"
 	f.write(s)
